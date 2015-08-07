@@ -7,7 +7,7 @@ order = 1; %order =1 -> descending order of relevance,
                %order = 3 -> totally random relevance distribution
 
 first_run=1; % 1 first run; 0 not firstrun
-max_time = 300000; % max_time is the maximum amount of time allocated per 
+max_time = 60000; % max_time is the maximum amount of time allocated per 
                   %search task in milliseconds. For now we set it to 5
                   %minute which is = 300,000 ms
 
