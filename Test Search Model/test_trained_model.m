@@ -1,10 +1,9 @@
 %% for Q-learning
 start_location=0;
 
-% this value add additional cost for visiting the same item again and again
-visit_penalize = 100;
 %% directly copeied from menu model.
-alpha = 1e-1; % <-learning rate, or the step size
+alpha = 0; %1e-1; % <-learning rate, or the step size 
+                %set alpha to zero if running testing
 gamma = 1;    % <- take this as an undiscounted task  <- for the epsilon greedy policy 
 max_steps=20;
 readingReward=10000; %reward for reading
@@ -23,6 +22,7 @@ prob_opening = 0.8; %Following Blackmon et al. 2007,
                     %are considered predicted clicks by the CoLiDeS model.
                     
 prob_reading = 0.7; %taking insights from prob_opening
+
 % for Q_table
 qt_block_size =10000; 
 
@@ -45,16 +45,13 @@ if first_run==1
     nEncountedStates=0;
 else
     % for Q_table
+    %load('All_Data_V210000000.mat');
+    load(strcat('All_Data_',ranking_type,'_1000000.mat'));
     nEncountedStates=size(QTableEnterMap,1);
     listPtr=size(QTableEnterMap,1);
     Qtable_size=size(QT,1); % initlal size of Q-table
 % if there is no enough space left in prelocated table, adding a new block.   
 end
-
-%%initialize the items clicked,read, and visited
-items_clicked_test = zeros(ntrials,nitems);
-items_read_test = zeros(ntrials,nitems);
-items_visited_test = zeros(ntrials,nitems);
 
 %% for recording the data
 % only record learning variable every 10000 trial
@@ -67,6 +64,7 @@ n_steps_unit=zeros(1,record_unit); %creates a column array of 10000...
 %columns and value 0. [00000 ....00(10000th item)]
 correct_unit=zeros(1,record_unit);
 TimeSpent_unit=zeros(1,record_unit);
+
 count1=1;
 
 if first_run==1
@@ -75,21 +73,10 @@ if first_run==1
     all_accuracy=zeros(ntrials/record_unit,1);
     count2=1;
 else
-    all_steps_new=zeros(ntrials/record_unit,1);
-    all_timespent_new=zeros(ntrials/record_unit,1);
-    all_accuracy_new=zeros(ntrials/record_unit,1);
+    items_clicked_test = zeros(ntrials,nitems);
+    items_read_test = zeros(ntrials,nitems);
+    items_visited_test = zeros(ntrials,nitems);
     
-    n=size(find(all_steps>0),1);
-    all_steps=all_steps(1:n,1);
-    all_timespent=all_timespent(1:n,1);
-    all_accuracy=all_accuracy(1:n,1);
-    
-    all_steps=cat(1,all_steps,all_steps_new);
-    all_timespent=cat(1,all_timespent,all_timespent_new);
-    all_accuracy=cat(1,all_accuracy,all_accuracy_new);
-      
-    
-    count2=n+1;
 end
 
 result_index=1;
@@ -113,16 +100,13 @@ for trial=1: ntrials
         result_index=1;
     end
     
-    current_list=[query_words_visit', title_length',...
-       items_visited_test(result_index,:)',...
-       items_read_test(result_index,:)', items_clicked_test(result_index,:)' ];
+    current_list=[query_words_visit', title_length'];
     
     %rank = NaN; 
     
     %calculate the reward for opening
     max_relevance = max(ResultListRelevance);
     Reward(1,2) = round(average_opening_time/(prob_opening*max_relevance));
-    
     
     
     % start a trial
@@ -152,9 +136,8 @@ for trial=1: ntrials
     
     
     %% begin q-learning
-    %while(n_steps<max_steps && TimeSpent<max_time)
     while(n_steps<max_steps && TimeSpent<max_time)
-
+     
      items_visited = zeros(1,nitems);
      items_read = zeros(1,nitems);
      items_opened = zeros(1,nitems);   
@@ -173,7 +156,9 @@ for trial=1: ntrials
          elseif order == 3
              action_chosen = randi([1 nitems],1);
          end
-     else
+         
+
+     else 
             [temp]=find(QT(state_row,:)==max(QT(state_row,:)));
             %logic: find all the actions that have the highest value. 
             %If there are several actions with the same highest value, 
@@ -198,9 +183,10 @@ for trial=1: ntrials
        %time spent
        %reading = 1 if action is reading the focused item
        %opening = 1 if action is opening the focused item
+       
        if action_chosen>nitems 
         if action_chosen==nitems+1 %action = read the focused/visited item
-             Reward(1,1) = ...
+            Reward(1,1) = ...
                  round(average_reading_time*title_length(focus)/(prob_reading*max_relevance));
              ImmediateReward=Reward(1,1)*ResultListRelevance(focus);
              Duration = average_reading_time*title_length(focus);
@@ -215,7 +201,7 @@ for trial=1: ntrials
        end
        
        TimeSpent=TimeSpent+Duration;
-      
+       ImmediateReward= ImmediateReward -Duration;
        
         % STEP 2.2, take action chosen, observe s'.
         
@@ -235,16 +221,17 @@ for trial=1: ntrials
         opened = find(items_opened==1);
         
         if opened
-            items_clicked_test(trial,opened) = items_clicked_test(trial,opened)+ 1;
+        items_clicked_test(trial,opened) = items_clicked_test(trial,opened)+ 1;
         end
         if read
-            items_read_test(trial,read) = items_read_test(trial,read)+ 1;
+        items_read_test(trial,read) = items_read_test(trial,read)+ 1;
         end
         if visited
-            items_visited_test(trial,visited) = items_visited_test(trial,visited)+1;
+        items_visited_test(trial,visited) = items_visited_test(trial,visited)+1;
         end
         
         available_title_length(visited) = title_length(visited);
+        
         %available_query_words_visiting(visited) = query_words_visit(visited);
         %available_query_words_reading(read) = query_words_read(read);
         available_query_words(visited) = query_words_visit(visited);
@@ -254,13 +241,10 @@ for trial=1: ntrials
         
         
         
+        
         %temp1= [available_query_words_visiting,available_query_words_reading,...
         %    available_title_length];
-        %temp1= [available_query_words,available_title_length];
-        %upudated the state vector to include the count of items visited,
-        %items clicked, and items read
-        temp1= [available_query_words,available_title_length,...
-            items_visited_test(trial,:),items_read_test(trial,:),items_clicked_test(trial,:)];
+        temp1= [available_query_words,available_title_length];
         
         state1=[temp1,focus];
         
@@ -275,29 +259,8 @@ for trial=1: ntrials
             new_state_row=nEncountedStates;
         end
         
-        %% update the immediate reward considering the number of previous 
-        %%visits, reads, and clicks
-        if action_chosen>nitems 
-            if action_chosen==nitems+1 %action = read the focused/visited item
-               nreads = items_read_test(trial,focus);
-               ImmediateReward= ImmediateReward/(2^(nreads-1));
-            elseif action_chosen==nitems+2 %action = open the focused/visited item
-               nclicks = items_clicked_test(trial,focus);
-               ImmediateReward = ImmediateReward/(2^(nclicks-1));
-            end
-        else %i.e. the action is just to visit/fixate on an item
-            nvisits = items_visited_test(trial,focus);
-            %add an additional cost to penalize immediate reward
-            ImmediateReward = ImmediateReward - visit_penalize*(nvisits-1);
             
-        end
-                
-       ImmediateReward= ImmediateReward -Duration;
-        
-        
-        
-        
-        %% Q-table Update
+      %% Q-table Update
         QT(state_row,action_chosen) = ...
         QT(state_row,action_chosen) + alpha*( ImmediateReward + gamma  *   max(QT(new_state_row,:)) - QT(state_row,action_chosen) ); 
         %equation 6.6 in the book
@@ -314,10 +277,10 @@ for trial=1: ntrials
         
     end
     %1e5
-    if mod(trial,1e6)==0
-        filename = strcat('All_Data_Memory_',ranking_type,'_',num2str(trial));
+    if mod(trial,ntrials)==0
+        filename = strcat('Test_Data_',ranking_type,num2str(trial));
         save([filename '.mat'],...
-            'QT','QTableEnterMap','items_clicked_test','items_read_test','items_visited_test')
+            'QT','QTableEnterMap', 'items_clicked_test','items_read_test','items_visited_test')
     end
     
 end

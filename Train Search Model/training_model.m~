@@ -95,7 +95,7 @@ end
 result_index=1;
 ImmediateReward=0;
 %% Begin the real training
-for trial=1: ntrials
+for trial=1: 1%ntrials
     trial
     
     %Relevance
@@ -288,7 +288,7 @@ for trial=1: ntrials
         else %i.e. the action is just to visit/fixate on an item
             nvisits = items_visited_test(trial,focus);
             %add an additional cost to penalize immediate reward
-            ImmediateReward = ImmediateReward - visit_penalize*(nvisits-1);
+            ImmediateReward= ImmediateReward - visit_penalize*(nvisits-1);
             
         end
                 
@@ -314,8 +314,8 @@ for trial=1: ntrials
         
     end
     %1e5
-    if mod(trial,1e6)==0
-        filename = strcat('All_Data_Memory_',ranking_type,'_',num2str(trial));
+    if mod(trial,1e5)==0
+        filename = strcat('All_Data_',ranking_type,'_',num2str(trial));
         save([filename '.mat'],...
             'QT','QTableEnterMap','items_clicked_test','items_read_test','items_visited_test')
     end
