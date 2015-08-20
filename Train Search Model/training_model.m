@@ -102,7 +102,7 @@ items_read = zeros(1,nitems);
 items_clicked = zeros(1,nitems);
 
 %% Begin the real training
-for trial=1: 1%ntrials
+for trial=1: ntrials
     trial
     
     
@@ -214,7 +214,6 @@ for trial=1: 1%ntrials
        %time spent
        %reading = 1 if action is reading the focused item
        %opening = 1 if action is opening the focused item
-       action_chosen
        
        if action_chosen>nitems 
         if action_chosen==nitems+1 %action = read the focused/visited item
@@ -301,7 +300,7 @@ for trial=1: 1%ntrials
         %temp1= [items_visited_test(trial,:),items_read_test(trial,:),items_clicked_test(trial,:)];
         temp1= [items_visited,items_read,items_clicked];
 
-        state1=[temp1,focus,available_query_words,available_title_length]
+        state1=[temp1,focus,available_query_words,available_title_length];
         
         state_string=num2str(state1);
         
@@ -353,7 +352,7 @@ for trial=1: 1%ntrials
         
     end
     %1e5
-    if mod(trial,1e6)==0
+    if mod(trial,2e5)==0
         filename = strcat('All_Data_Memory_',ranking_type,'_',num2str(trial));
         save([filename '.mat'],...
             'QT','QTableEnterMap','items_clicked_test','items_read_test','items_visited_test')
