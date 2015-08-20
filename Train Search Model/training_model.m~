@@ -56,47 +56,56 @@ items_clicked_test = zeros(ntrials,nitems);
 items_read_test = zeros(ntrials,nitems);
 items_visited_test = zeros(ntrials,nitems);
 
+
+
 %% for recording the data
 % only record learning variable every 10000 trial
 %Paba - Not sure exactly what is meant by recording data -> does it mean
 %writing them to the q-table ?? or recording the time spent after every
 %10000 trials??
 
-record_unit=10000;
-n_steps_unit=zeros(1,record_unit); %creates a column array of 10000...
-%columns and value 0. [00000 ....00(10000th item)]
-correct_unit=zeros(1,record_unit);
-TimeSpent_unit=zeros(1,record_unit);
+% record_unit=10000;
+% n_steps_unit=zeros(1,record_unit); %creates a column array of 10000...
+% %columns and value 0. [00000 ....00(10000th item)]
+% correct_unit=zeros(1,record_unit);
+% TimeSpent_unit=zeros(1,record_unit);
 count1=1;
 
-if first_run==1
-    all_steps=zeros(ntrials/record_unit,1);
-    all_timespent=zeros(ntrials/record_unit,1);
-    all_accuracy=zeros(ntrials/record_unit,1);
-    count2=1;
-else
-    all_steps_new=zeros(ntrials/record_unit,1);
-    all_timespent_new=zeros(ntrials/record_unit,1);
-    all_accuracy_new=zeros(ntrials/record_unit,1);
-    
-    n=size(find(all_steps>0),1);
-    all_steps=all_steps(1:n,1);
-    all_timespent=all_timespent(1:n,1);
-    all_accuracy=all_accuracy(1:n,1);
-    
-    all_steps=cat(1,all_steps,all_steps_new);
-    all_timespent=cat(1,all_timespent,all_timespent_new);
-    all_accuracy=cat(1,all_accuracy,all_accuracy_new);
-      
-    
-    count2=n+1;
-end
+% if first_run==1
+%     all_steps=zeros(ntrials/record_unit,1);
+%     all_timespent=zeros(ntrials/record_unit,1);
+%     all_accuracy=zeros(ntrials/record_unit,1);
+%     count2=1;
+% else
+%     all_steps_new=zeros(ntrials/record_unit,1);
+%     all_timespent_new=zeros(ntrials/record_unit,1);
+%     all_accuracy_new=zeros(ntrials/record_unit,1);
+%     
+%     n=size(find(all_steps>0),1);
+%     all_steps=all_steps(1:n,1);
+%     all_timespent=all_timespent(1:n,1);
+%     all_accuracy=all_accuracy(1:n,1);
+%     
+%     all_steps=cat(1,all_steps,all_steps_new);
+%     all_timespent=cat(1,all_timespent,all_timespent_new);
+%     all_accuracy=cat(1,all_accuracy,all_accuracy_new);
+%       
+%     
+%     count2=n+1;
+% end
 
 result_index=1;
 ImmediateReward=0;
+
+items_visited = zeros(1,nitems);
+items_read = zeros(1,nitems);
+items_clicked = zeros(1,nitems);
+
 %% Begin the real training
-for trial=1: 1%ntrials
+for trial=1: ntrials
     trial
+    
+    
     
     %Relevance
     ResultListRelevance = ResultLibrary(result_index,:); 
@@ -113,8 +122,11 @@ for trial=1: 1%ntrials
         result_index=1;
     end
     
-    current_list=[query_words_visit', title_length',...
-       items_visited_test(result_index,:)',...
+%     current_list=[query_words_visit', title_length',...
+%        items_visited_test(result_index,:)',...
+%        items_read_test(result_index,:)', items_clicked_test(result_index,:)' ];
+    
+    current_list=[items_visited_test(result_index,:)',...
        items_read_test(result_index,:)', items_clicked_test(result_index,:)' ];
     
     %rank = NaN; 
@@ -131,11 +143,13 @@ for trial=1: 1%ntrials
     correct=0;
     n_steps=0;
     focus=start_location;
+    current_item_query_words = NaN;
+    current_item_title_length = NaN;
     
     inital_state=NaN(size(current_list(:)));
     
     %state1=[inital_state;rank;]';
-    state1=[inital_state;focus;]';
+    state1=[inital_state;focus;current_item_query_words;current_item_title_length]';
     
     state_string=num2str(state1);
     
@@ -149,20 +163,22 @@ for trial=1: 1%ntrials
     end
     
 
-    
+    items_visited = zeros(1,nitems);
+    items_read = zeros(1,nitems);
+    items_clicked = zeros(1,nitems);   
     
     %% begin q-learning
     %while(n_steps<max_steps && TimeSpent<max_time)
-    while(n_steps<max_steps && TimeSpent<max_time)
+    while(TimeSpent<max_time)
 
-     items_visited = zeros(1,nitems);
-     items_read = zeros(1,nitems);
-     items_opened = zeros(1,nitems);   
+
         
      %initializing state features, initially no information is available
      %therefore initialize to NaN
-     available_title_length = NaN(1,nitems);
-     available_query_words = NaN(1,nitems);
+%      available_title_length = NaN(1,nitems);
+%      available_query_words = NaN(1,nitems);
+     available_title_length = current_item_title_length;
+     available_query_words = current_item_query_words;
      
      if n_steps==0
          if order == 1
@@ -198,59 +214,81 @@ for trial=1: 1%ntrials
        %time spent
        %reading = 1 if action is reading the focused item
        %opening = 1 if action is opening the focused item
+       
        if action_chosen>nitems 
         if action_chosen==nitems+1 %action = read the focused/visited item
              Reward(1,1) = ...
                  round(average_reading_time*title_length(focus)/(prob_reading*max_relevance));
              ImmediateReward=Reward(1,1)*ResultListRelevance(focus);
              Duration = average_reading_time*title_length(focus);
+             
+             %items_read(1,focus) = 1;
+             items_read_test(trial,focus) = items_read_test(trial,focus)+ 1;
+             items_read(1,focus) = 1;
+             available_query_words = query_words_read(focus);
+             
         elseif action_chosen==nitems+2 %action = open the focused/visited item
              ImmediateReward=Reward(1,2)*ResultListRelevance(focus);
              Duration = average_opening_time;
+             
+             %items_opened(1,focus) = 1;
+             items_clicked_test(trial,focus) = items_clicked_test(trial,focus)+ 1;
+             available_query_words = query_words_read(focus);
+             items_clicked(1,focus) = 1;
+             
         end
        else %i.e. the action is just to visit/fixate on an item
            ImmediateReward= 0; %just focus on the item = no reward
            Duration = average_fixation_time; %fixation time
-        
+           
+           focus=action_chosen;
+           %items_visited(1,focus) = 1;
+                    
+           available_query_words = query_words_visit(focus);
+           items_visited_test(trial,focus) = items_visited_test(trial,focus)+1;
+           items_visited(1,focus) = 1;
+           
+            
        end
        
+       available_title_length = title_length(focus);
        TimeSpent=TimeSpent+Duration;
       
        
         % STEP 2.2, take action chosen, observe s'.
         
-       if action_chosen<nitems+1 % is to fixate on next new location
-          focus=action_chosen;
-          items_visited(1,focus) = 1;
-          available_title_length(focus) = title_length(focus);           
-       elseif action_chosen == nitems+1
-           items_read(1,focus) = 1;
-           
-       elseif action_chosen == nitems+2
-           items_opened(1,focus) = 1;
-          
-       end
-        visited = find(items_visited==1);
-        read = find(items_read==1);
-        opened = find(items_opened==1);
+%        if action_chosen<nitems+1 % is to fixate on next new location
+%           focus=action_chosen;
+%           items_visited(1,focus) = 1;
+%           available_title_length(focus) = title_length(focus);           
+%        elseif action_chosen == nitems+1
+%            items_read(1,focus) = 1;
+%            
+%        elseif action_chosen == nitems+2
+%            items_opened(1,focus) = 1;
+%           
+%        end
+%         visited = find(items_visited==1);
+%         read = find(items_read==1);
+%         opened = find(items_opened==1);
+%         
+%         if opened
+%             items_clicked_test(trial,opened) = items_clicked_test(trial,opened)+ 1;
+%         end
+%         if read
+%             items_read_test(trial,read) = items_read_test(trial,read)+ 1;
+%         end
+%         if visited
+%             items_visited_test(trial,visited) = items_visited_test(trial,visited)+1;
+%         end
         
-        if opened
-            items_clicked_test(trial,opened) = items_clicked_test(trial,opened)+ 1;
-        end
-        if read
-            items_read_test(trial,read) = items_read_test(trial,read)+ 1;
-        end
-        if visited
-            items_visited_test(trial,visited) = items_visited_test(trial,visited)+1;
-        end
-        
-        available_title_length(visited) = title_length(visited);
-        %available_query_words_visiting(visited) = query_words_visit(visited);
-        %available_query_words_reading(read) = query_words_read(read);
-        available_query_words(visited) = query_words_visit(visited);
-        available_query_words(read) = query_words_read(read);
-        % assume that even when you open you see the same query words
-        available_query_words(opened) = query_words_read(opened);
+%         available_title_length(visited) = title_length(visited);
+%         %available_query_words_visiting(visited) = query_words_visit(visited);
+%         %available_query_words_reading(read) = query_words_read(read);
+%         available_query_words(visited) = query_words_visit(visited);
+%         available_query_words(read) = query_words_read(read);
+%         % assume that even when you open you see the same query words
+%         available_query_words(opened) = query_words_read(opened);
         
         
         
@@ -259,10 +297,10 @@ for trial=1: 1%ntrials
         %temp1= [available_query_words,available_title_length];
         %upudated the state vector to include the count of items visited,
         %items clicked, and items read
-        temp1= [available_query_words,available_title_length,...
-            items_visited_test(trial,:),items_read_test(trial,:),items_clicked_test(trial,:)];
-        
-        state1=[temp1,focus];
+        %temp1= [items_visited_test(trial,:),items_read_test(trial,:),items_clicked_test(trial,:)];
+        temp1= [items_visited,items_read,items_clicked];
+
+        state1=[temp1,focus,available_query_words,available_title_length];
         
         state_string=num2str(state1);
         
@@ -288,7 +326,7 @@ for trial=1: 1%ntrials
         else %i.e. the action is just to visit/fixate on an item
             nvisits = items_visited_test(trial,focus);
             %add an additional cost to penalize immediate reward
-            ImmediateReward= ImmediateReward - visit_penalize*(nvisits-1);
+            ImmediateReward = ImmediateReward - visit_penalize*(nvisits-1);
             
         end
                 
@@ -314,8 +352,8 @@ for trial=1: 1%ntrials
         
     end
     %1e5
-    if mod(trial,1e5)==0
-        filename = strcat('All_Data_',ranking_type,'_',num2str(trial));
+    if mod(trial,2e5)==0
+        filename = strcat('All_Data_Memory_',ranking_type,'_',num2str(trial));
         save([filename '.mat'],...
             'QT','QTableEnterMap','items_clicked_test','items_read_test','items_visited_test')
     end
