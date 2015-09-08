@@ -1,7 +1,8 @@
 function run_training(nitems,order,first_run,max_time)
 
-ntrials=1e6;
+
 epsilon=0.05;
+ntrials=2e6;
 
 switch order
     case 1
@@ -12,10 +13,31 @@ switch order
         ranking_type='Random';
 end
 
-load([ranking_type '/Relevance_Distribution_' ranking_type '.mat']);
-load([ranking_type '/Query_Word_Distribution_Visit_' ranking_type '.mat']);
-load([ranking_type '/Query_Word_Distribution_Read_' ranking_type '.mat']);
-load('Random_Title_Length.mat');
+if first_run == 1
+%     load([ranking_type '/Relevance_Distribution_' ranking_type '.mat']);
+%     load([ranking_type '/Query_Word_Distribution_Visit_' ranking_type '.mat']);
+%     load([ranking_type '/Query_Word_Distribution_Read_' ranking_type '.mat']);
+%     load('Random_Title_Length.mat');
+    load(['Relevance_Distribution_' ranking_type '.mat']);
+    load(['Query_Word_Distribution_Visit_' ranking_type '.mat']);
+    load(['Query_Word_Distribution_Read_' ranking_type '.mat']);
+    load('Random_Title_Length.mat');
+else
+   ntrials=1e4;
+   epsilon=0;
+   
+   load(strcat('Data_1min_v4_Memory_',ranking_type,'_1000000.mat')); 
+%    load([ranking_type '/Relevance_Distribution_' ranking_type '_Test.mat']);
+%    load([ranking_type '/Query_Word_Distribution_Visit_' ranking_type '_Test.mat']);
+%    load([ranking_type '/Query_Word_Distribution_Read_' ranking_type '_Test.mat']);
+   load(['Relevance_Distribution_' ranking_type '_Test.mat']);
+   load(['Query_Word_Distribution_Visit_' ranking_type '_Test.mat']);
+   load(['Query_Word_Distribution_Read_' ranking_type '_Test.mat']);
+   load('Random_Title_Length_Test.mat');
+end
+
+
+
 
 if strcmp(ranking_type,'Descending')
     ResultLibrary = relevance_distribution_descending;
@@ -45,6 +67,8 @@ else
     disp('no such result list ordering type')
 end
 
-training_model
+
+
+training_model_v4
 
 end

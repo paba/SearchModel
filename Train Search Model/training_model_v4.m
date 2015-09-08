@@ -2,7 +2,8 @@
 start_location=0;
 
 % this value add additional cost for visiting the same item again and again
-visit_penalize = 100;
+%visit_penalize = 100;
+visit_penalize = 0;
 %% directly copeied from menu model.
 alpha = 1e-1; % <-learning rate, or the step size
 gamma = 1;    % <- take this as an undiscounted task  <- for the epsilon greedy policy 
@@ -13,8 +14,10 @@ Reward=[readingReward,openingReward];
 average_reading_time = 300 ; %average reading speed = 200 wpm = 0.3 s/word
                               %0.3s = 300ms
                               %according to http://www.readingsoft.com/
-average_opening_time = 300*150; %let's assume that the user reads the entire
-                                %abstract which is 150 words after opening it
+average_opening_time = 7000;%300 ms/fixation * 2 fixations/row * 10 rows + 1000 ms
+                            %    loading time
+                            %300*150; %let's assume that the user reads the entire
+                            %abstract which is 150 words after opening it
 average_fixation_time =300; %TODO:find more realistic time
 
 prob_opening = 0.8; %Following Blackmon et al. 2007, 
@@ -33,7 +36,17 @@ qt_block_size =10000;
 %selecting/clicking on the url of that item for reading the visited item.
 %terminating condition is expiration of time
 
+max_title_length = 15;
+min_title_length = 5;
+grid_levels_title = 4; % 1, 2, 3, 4
+
+min_querywords = 0;
+max_querywords = 6;
+grid_levels_query = 3; % 0, 1, 2
+max_action_record = 20;
+
 n_actions=nitems+2;
+
 
 if first_run==1
     Qtable_size=1e5; % initlal size of Q-table
@@ -50,6 +63,8 @@ else
     Qtable_size=size(QT,1); % initlal size of Q-table
 % if there is no enough space left in prelocated table, adding a new block.
     alpha = 0;
+%this is to record the interaction path, only when testing
+    action_path = zeros(ntrials,max_action_record);
 end
 
 %%initialize the items clicked,read, and visited
@@ -101,13 +116,27 @@ ImmediateReward=0;
 items_visited = zeros(1,nitems);
 items_read = zeros(1,nitems);
 items_clicked = zeros(1,nitems);
+four_read_or_clicked = zeros(1,nitems);
+four_focused = zeros(1,4);
+relevance_read_or_clicked = zeros(1,nitems);
+read_or_clicked = zeros(1,nitems);
+    
+
+%% grid all the 3 state vectors : 1. title_length_list, 2. QueryWordVisit, ...
+%3. QueryWordRead
+title_length_list = gridding...
+    (min_title_length,max_title_length,grid_levels_title,title_length_list);
+QueryWordVisit = ...
+    gridding(min_querywords,max_querywords,grid_levels_query,QueryWordVisit);
+QueryWordRead = ...
+    gridding(min_querywords,max_querywords,grid_levels_query,QueryWordRead);
 
 %% Begin the real training
 for trial=1: ntrials
-    
+   
 
     %Relevance
-    ResultListRelevance = ResultLibrary(result_index,:); 
+    ResultListRelevance = ResultLibrary(result_index,:) ;
     
     %State features
     rank = [1:nitems]; %rank of items
@@ -125,14 +154,17 @@ for trial=1: ntrials
 %        items_visited_test(result_index,:)',...
 %        items_read_test(result_index,:)', items_clicked_test(result_index,:)' ];
     
-    current_list=[items_visited_test(result_index,:)',...
-       items_read_test(result_index,:)', items_clicked_test(result_index,:)' ];
+%     current_list=[items_visited_test(result_index,:)',...
+%        items_read_test(result_index,:)', items_clicked_test(result_index,:)' ];
+
+    %current_list=[items_read_test(result_index,:)', items_clicked_test(result_index,:)' ];
+    current_list=[four_read_or_clicked'];
     
     %rank = NaN; 
     
     %calculate the reward for opening
     max_relevance = max(ResultListRelevance);
-    Reward(1,2) = round(average_opening_time/(prob_opening*max_relevance));
+    %Reward(1,2) = round(average_opening_time/(prob_opening*max_relevance));
     
     
     
@@ -161,17 +193,23 @@ for trial=1: ntrials
         state_row=nEncountedStates;
     end
     
+    items_visited(1,:) = 0;
+    items_read(1,:) = 0;
+    items_clicked(1,:) = 0;
+    four_read_or_clicked(1,:) = 0;
+    relevance_read_or_clicked(1,:) = 0;
+    read_or_clicked(1,:) = 0 ; 
+    four_focused(1,:) = 0;
 
-    items_visited = zeros(1,nitems);
-    items_read = zeros(1,nitems);
-    items_clicked = zeros(1,nitems);   
-    
+    temp_memory = zeros(1,nitems);
+    first_read_or_clicked = 0;
+    last_read_or_clicked = 0;
     %% begin q-learning
     %while(n_steps<max_steps && TimeSpent<max_time)
     while(TimeSpent<max_time)
 
-
-        
+     temp_memory(1,:) = 0;
+             
      %initializing state features, initially no information is available
      %therefore initialize to NaN
 %      available_title_length = NaN(1,nitems);
@@ -184,9 +222,9 @@ for trial=1: ntrials
             action_chosen=1;%if this is the first step, select action 1, ...
             %action1 = visit/fixate on result item 1.
          elseif order == 2
-             action_chosen = randi([1 3],1);
+             action_chosen = 1;%randi([1 3],1);
          elseif order == 3
-             action_chosen = randi([1 nitems],1);
+             action_chosen = 1;%randi([1 nitems],1);
          end
      else
             [temp]=find(QT(state_row,:)==max(QT(state_row,:)));
@@ -203,8 +241,8 @@ for trial=1: ntrials
             end
             
      end
-        
-      n_steps=n_steps+1;
+     
+     
       
        %STEP 2, take action chosen, observe rewards ,and s'.
        % check the item fixated,if the actions are to either read an item 
@@ -213,18 +251,25 @@ for trial=1: ntrials
        %time spent
        %reading = 1 if action is reading the focused item
        %opening = 1 if action is opening the focused item
-       
+       %action_chosen
        if action_chosen>nitems 
+         last_read_or_clicked = focus;
+         if first_read_or_clicked == 0
+            first_read_or_clicked = focus;
+         end
         if action_chosen==nitems+1 %action = read the focused/visited item
-             Reward(1,1) = ...
-                 round(average_reading_time*title_length(focus)/(prob_reading*max_relevance));
-             ImmediateReward=Reward(1,1)*ResultListRelevance(focus);
+%              Reward(1,1) = ...
+%                  round(average_reading_time*title_length(focus)/(prob_reading*max_relevance));
+%              ImmediateReward=Reward(1,1)*ResultListRelevance(focus);
+             
+             ImmediateReward = Reward(1,1)*ResultListRelevance(focus);
              Duration = average_reading_time*title_length(focus);
              
              %items_read(1,focus) = 1;
              items_read_test(trial,focus) = items_read_test(trial,focus)+ 1;
              items_read(1,focus) = 1;
              available_query_words = query_words_read(focus);
+
              
         elseif action_chosen==nitems+2 %action = open the focused/visited item
              ImmediateReward=Reward(1,2)*ResultListRelevance(focus);
@@ -234,7 +279,7 @@ for trial=1: ntrials
              items_clicked_test(trial,focus) = items_clicked_test(trial,focus)+ 1;
              available_query_words = query_words_read(focus);
              items_clicked(1,focus) = 1;
-             
+
         end
        else %i.e. the action is just to visit/fixate on an item
            ImmediateReward= 0; %just focus on the item = no reward
@@ -250,8 +295,76 @@ for trial=1: ntrials
             
        end
        
+       %pos = mod(n_steps,3);
+       four_focused(1,1) = first_read_or_clicked;
+       four_focused(1,2) = last_read_or_clicked;
+       read_or_clicked = or(items_clicked,items_read);
+       if first_read_or_clicked ~= 0 && (action_chosen > nitems)
+           relevance_read_or_clicked = ...
+           ResultListRelevance.*read_or_clicked;
+           %make the first read or focused item and the last read or focused
+           %item zero to consider only the inbetween ones
+           relevance_read_or_clicked(1,four_focused(1,1)) = 0;
+           relevance_read_or_clicked(1,four_focused(1,2)) = 0;
+           %mean_rel_read_or_clicked = ...
+            %   mean(relevance_read_or_clicked(relevance_read_or_clicked~=0));
+           
+           max_val = max(relevance_read_or_clicked);
+           if max_val~=0
+             four_focused(1,3) = find(relevance_read_or_clicked==max_val);
+           end
+           
+           val = relevance_read_or_clicked(relevance_read_or_clicked~=0);
+           if ~isnan(val) 
+            four_focused(1,4) = find(relevance_read_or_clicked==min(val));
+           end
+
+           
+%            if ~isnan(mean_rel_read_or_clicked)
+%            
+%                temp = relevance_read_or_clicked>=mean_rel_read_or_clicked;
+%                max_ids = ...
+%                    find(relevance_read_or_clicked == max(relevance_read_or_clicked(temp)));
+%                four_focused(1,3) = max_ids(1);
+% 
+%                temp = ...
+%                    find(relevance_read_or_clicked(relevance_read_or_clicked~=0)<mean_rel_read_or_clicked);
+%                if ~isempty(temp)
+%                    min_ids = find(...
+%                        relevance_read_or_clicked == min(relevance_read_or_clicked(temp)));
+%                    four_focused(1,4) = min_ids(1);
+%                end 
+%            
+%            end
+       end
+       
+       
+     %mark the position of last three focused items 1
+%      for x = 1: 3
+%          has_visited = four_focused(1,x);
+%          if has_visited
+%             temp_focus(1,has_visited) = 1;
+%          end
+%      end
+
+       for x = 1:4
+           memory = four_focused(1,x); 
+           if memory
+                temp_memory(1,memory) = 1;
+           end
+       end
+         
+        
+      n_steps=n_steps+1;
+      
+       
+       
        available_title_length = title_length(focus);
        TimeSpent=TimeSpent+Duration;
+       
+       %make 3 items before the focus visible
+       
+       
       
        
         % STEP 2.2, take action chosen, observe s'.
@@ -297,7 +410,10 @@ for trial=1: ntrials
         %upudated the state vector to include the count of items visited,
         %items clicked, and items read
         %temp1= [items_visited_test(trial,:),items_read_test(trial,:),items_clicked_test(trial,:)];
-        temp1= [items_visited,items_read,items_clicked];
+        %temp1= [items_visited,items_read,items_clicked];
+        %temp1= [and(items_read,temp_focus),and(items_clicked,temp_focus)];
+
+        temp1= [and(read_or_clicked,temp_memory)];
 
         state1=[temp1,focus,available_query_words,available_title_length];
         
@@ -317,10 +433,16 @@ for trial=1: ntrials
         if action_chosen>nitems 
             if action_chosen==nitems+1 %action = read the focused/visited item
                nreads = items_read_test(trial,focus);
-               ImmediateReward= ImmediateReward/(2^(nreads-1));
+               %ImmediateReward= ImmediateReward/(2^(nreads-1));
+               if nreads > 1
+                   ImmediateReward = 0;
+               end
             elseif action_chosen==nitems+2 %action = open the focused/visited item
                nclicks = items_clicked_test(trial,focus);
-               ImmediateReward = ImmediateReward/(2^(nclicks-1));
+               %ImmediateReward = ImmediateReward/(2^(nclicks-1));
+               if nclicks > 1
+                   ImmediateReward = 0;
+               end
             end
         else %i.e. the action is just to visit/fixate on an item
             nvisits = items_visited_test(trial,focus);
@@ -329,7 +451,7 @@ for trial=1: ntrials
             
         end
                 
-       ImmediateReward= ImmediateReward -Duration;
+       ImmediateReward= ImmediateReward - Duration;
         
         
         
@@ -348,13 +470,17 @@ for trial=1: ntrials
             QT(listPtr+1:Qtable_size,:) = 0;
         end
         
+        if n_steps <= max_action_record && first_run == 0
+            action_path(trial,n_steps) = action_chosen;
+        end
+        
         
     end
     %1e5
     
     if first_run == 1
-        if mod(trial,5e5)==0
-            filename = strcat('Data_1min_v2_Memory_',...
+        if mod(trial,2e5)==0
+            filename = strcat('Data2_1min_v4_Memory_',...
                     ranking_type,'_',num2str(trial));
             save([filename '.mat'],'QT','QTableEnterMap');
         end
@@ -363,11 +489,15 @@ for trial=1: ntrials
         end
     else
         trial
+        
+     
+        
         if mod(trial,ntrials)==0
-            filename = strcat('Test_Data_1min_v2_Memory_',...
+            filename = strcat('Test2_Data_1min_v4_Memory_',...
                                 ranking_type,'_',num2str(trial));
             save([filename '.mat'],...
-               'QT','QTableEnterMap','items_clicked_test','items_read_test','items_visited_test');
+               'QT','QTableEnterMap','items_clicked_test',...
+               'items_read_test','items_visited_test','action_path');
         end
     end
     
